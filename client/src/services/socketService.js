@@ -26,24 +26,33 @@ class SocketService {
       this.startClockCalibration();
     });
 
+    this.syncSamples = [];
+
     this.socket.on('pong:sync', ({ clientSendTime, serverTime }) => {
       const receiveTime = Date.now();
       const rtt = receiveTime - clientSendTime;
       this.lastRtt = rtt;
 
-      // Filter out high-jitter outliers (> 500ms)
-      if (rtt > 500 && this.serverClockOffset !== 0) return;
+      // Filter out high-jitter outliers (> 600ms)
+      if (rtt > 600 && this.serverClockOffset !== 0) return;
 
       // Cristian's Algorithm: ServerTime - (ClientSendTime + RTT / 2)
       const measuredOffset = serverTime - (clientSendTime + rtt / 2);
 
-      if (this.serverClockOffset === 0 || rtt < (this.bestRtt || 9999)) {
-        this.bestRtt = rtt;
-        this.serverClockOffset = measuredOffset;
-      } else {
-        // Smooth filter (Exponential Moving Average) to eliminate jitter
-        this.serverClockOffset = this.serverClockOffset * 0.8 + measuredOffset * 0.2;
+      // Collect rolling window of probe samples
+      this.syncSamples.push({ rtt, offset: measuredOffset });
+      if (this.syncSamples.length > 8) {
+        this.syncSamples.shift();
       }
+
+      // Sort by lowest RTT (minimum network queuing delay = true clock symmetry)
+      const sorted = [...this.syncSamples].sort((a, b) => a.rtt - b.rtt);
+      // Average the best 3 lowest-latency samples
+      const bestSamples = sorted.slice(0, Math.min(3, sorted.length));
+      const bestAvgOffset = bestSamples.reduce((sum, s) => sum + s.offset, 0) / bestSamples.length;
+
+      this.serverClockOffset = bestAvgOffset;
+      this.bestRtt = sorted[0].rtt;
     });
 
     this.socket.on('disconnect', () => {
@@ -52,16 +61,15 @@ class SocketService {
   }
 
   startClockCalibration() {
-    this.calibrate();
-    // Burst calibration at startup (3 rapid pings)
-    setTimeout(() => this.calibrate(), 400);
-    setTimeout(() => this.calibrate(), 1000);
-    setTimeout(() => this.calibrate(), 2000);
+    // Rapid burst probes at startup (5 rapid pings 120ms apart to lock clock immediately)
+    for (let i = 0; i < 5; i++) {
+      setTimeout(() => this.calibrate(), i * 140);
+    }
 
     if (this.pingTimer) clearInterval(this.pingTimer);
     this.pingTimer = setInterval(() => {
       this.calibrate();
-    }, 8000);
+    }, 6000);
   }
 
   calibrate() {

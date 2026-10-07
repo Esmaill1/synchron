@@ -115,11 +115,16 @@ export class RoomManager {
 
   getCurrentPosition(room) {
     if (!room || !room.playback) return 0;
-    const { isPlaying, positionSec, lastUpdatedTimestamp, duration } = room.playback;
+    const { isPlaying, positionSec, lastUpdatedTimestamp, startAtServerTimestamp, duration } = room.playback;
     if (!isPlaying) {
       return positionSec;
     }
-    const elapsed = (Date.now() - lastUpdatedTimestamp) / 1000;
+    const now = Date.now();
+    const effectiveStart = startAtServerTimestamp || lastUpdatedTimestamp;
+    if (now < effectiveStart) {
+      return positionSec;
+    }
+    const elapsed = (now - effectiveStart) / 1000;
     let current = positionSec + elapsed;
     if (duration > 0 && current > duration) {
       current = duration;
@@ -152,7 +157,10 @@ export class RoomManager {
       room.playback.positionSec = clientPositionSec;
     }
     room.playback.isPlaying = true;
-    room.playback.lastUpdatedTimestamp = Date.now();
+    const now = Date.now();
+    // 200ms future scheduled epoch: allows all devices across network to pre-arm and trigger simultaneously
+    room.playback.startAtServerTimestamp = now + 200;
+    room.playback.lastUpdatedTimestamp = room.playback.startAtServerTimestamp;
     return true;
   }
 
@@ -309,6 +317,7 @@ export class RoomManager {
         isPlaying: room.playback.isPlaying,
         positionSec: room.playback.positionSec,
         currentPositionSec: this.getCurrentPosition(room),
+        startAtServerTimestamp: room.playback.startAtServerTimestamp || room.playback.lastUpdatedTimestamp,
         lastUpdatedTimestamp: room.playback.lastUpdatedTimestamp,
         duration: room.playback.duration,
         serverTime: Date.now()
