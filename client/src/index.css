@@ -761,3 +761,258 @@ body::before {
   font-style: italic;
   color: var(--solar-flare);
 }
+
+/* ==========================================================================
+   MOBILE & TABLET ADAPTIVE DESIGN SYSTEM (max-width: 768px and max-width: 480px)
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  /* Master Container */
+  .app-container {
+    padding: 0 16px 36px;
+    padding-bottom: calc(36px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Header */
+  .arch-header {
+    padding: 16px 0;
+    margin-bottom: 20px;
+    gap: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .brand-monolith {
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .brand-logotype {
+    font-size: 1.25rem;
+  }
+
+  .brand-station-tag {
+    font-size: 0.72rem;
+    padding: 4px 8px;
+    border: 1px solid var(--hairline);
+    background: rgba(255, 56, 0, 0.05);
+  }
+
+  .header-telemetry-cluster {
+    width: 100%;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .arch-pill {
+    padding: 6px 10px;
+    font-size: 0.68rem;
+    gap: 6px;
+  }
+
+  .arch-btn {
+    padding: 7px 12px;
+    font-size: 0.72rem;
+    min-height: 36px;
+  }
+
+  /* Stage Grid */
+  .arch-stage-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .sonic-stage-left {
+    gap: 24px;
+  }
+
+  /* Monumental Title Scale for Mobile */
+  .hero-monumental-title {
+    font-size: clamp(2.3rem, 10vw, 3.6rem);
+    line-height: 0.98;
+    letter-spacing: -0.03em;
+  }
+
+  .hero-eyebrow {
+    padding-bottom: 8px;
+  }
+
+  .hero-eyebrow-index {
+    font-size: 0.68rem;
+  }
+
+  .hero-artist-line {
+    font-size: 0.95rem;
+    flex-wrap: wrap;
+    gap: 8px;
+    line-height: 1.4;
+  }
+
+  /* Wavefield / Video Viewport on Mobile */
+  .wavefield-viewport {
+    height: 260px;
+  }
+
+  /* Sculptural Transport Bar */
+  .sculptural-transport {
+    padding: 16px 14px;
+    gap: 16px;
+  }
+
+  .timecode-rail-row {
+    gap: 10px;
+  }
+
+  .timecode-num {
+    font-size: 0.95rem;
+    min-width: 48px;
+  }
+
+  .transport-actions-row {
+    gap: 12px;
+  }
+
+  .transport-glyphs-group {
+    gap: 12px;
+  }
+
+  .btn-glyph-master {
+    width: 54px;
+    height: 54px;
+  }
+
+  .btn-glyph-secondary {
+    width: 38px;
+    height: 38px;
+  }
+
+  .volume-level-block {
+    gap: 8px;
+  }
+
+  .volume-slider-line {
+    width: 70px;
+  }
+
+  /* Ingestion Minimal Dock */
+  .ingestion-minimal-dock {
+    padding: 18px 14px;
+    gap: 14px;
+  }
+
+  .dock-header-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .dock-tab-switches {
+    width: 100%;
+  }
+
+  .dock-tab-btn {
+    flex: 1;
+    text-align: center;
+    padding: 8px 4px;
+  }
+
+  .drop-stream-box {
+    padding: 24px 14px;
+  }
+
+  .stream-input-form {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .stream-input-form button {
+    width: 100%;
+    padding: 12px;
+  }
+
+  /* Communal Sidebar */
+  .communal-sidebar-right {
+    gap: 16px;
+  }
+
+  .communal-panel {
+    min-height: 360px;
+    max-height: 480px;
+  }
+
+  .communal-tab-trigger {
+    padding: 12px 6px;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+  }
+
+  .communal-scroll-area {
+    padding: 14px 10px;
+  }
+
+  .crate-row {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .typographic-sparks-cluster {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .spark-word-btn {
+    padding: 8px 2px;
+    font-size: 0.62rem;
+  }
+
+  /* Entrance / Lobby Viewport */
+  .entrance-viewport {
+    padding: 24px 12px;
+    min-height: 90vh;
+  }
+
+  .entrance-monolith-box {
+    padding: 28px 18px;
+    gap: 22px;
+  }
+
+  .entrance-hero-type {
+    font-size: clamp(2.5rem, 12vw, 3.8rem);
+  }
+}
+
+@media (max-width: 480px) {
+  .app-container {
+    padding: 0 12px 28px;
+  }
+
+  .hero-monumental-title {
+    font-size: clamp(1.9rem, 9vw, 2.7rem);
+  }
+
+  .wavefield-viewport {
+    height: 220px;
+  }
+
+  .transport-actions-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .volume-level-block {
+    scale: 0.92;
+    transform-origin: right center;
+  }
+
+  .volume-slider-line {
+    width: 55px;
+  }
+
+  .entrance-monolith-box {
+    padding: 22px 14px;
+  }
+}

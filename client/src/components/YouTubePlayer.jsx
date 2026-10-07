@@ -87,6 +87,21 @@ export function YouTubePlayer({ videoId, playbackState, onDurationLoaded }) {
             audioSyncEngine.applySync(playbackState, true);
           },
           onStateChange: (event) => {
+            // YT.PlayerState.PLAYING is 1 (Video finished buffering and started outputting frames)
+            if (event.data === 1) {
+              if (playbackState && playbackState.isPlaying) {
+                const targetPos = audioSyncEngine.computeTargetPosition(playbackState);
+                const actualPos = event.target.getCurrentTime() || 0;
+                const drift = Math.abs(targetPos - actualPos);
+                // If user's internet took extra seconds to buffer, instantly snap to room clock:
+                if (drift > 0.35) {
+                  event.target.seekTo(targetPos, true);
+                }
+              } else if (playbackState && !playbackState.isPlaying) {
+                event.target.pauseVideo();
+              }
+            }
+
             // YT.PlayerState.ENDED is 0
             if (event.data === 0) {
               if (playbackState?.currentTrack) {

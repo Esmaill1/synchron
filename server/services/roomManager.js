@@ -5,10 +5,8 @@ export class RoomManager {
   }
 
   generateRoomId() {
-    const adjectives = ['vibe', 'beat', 'wave', 'sonic', 'pulse', 'echo', 'groove', 'flow'];
-    const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-    const num = Math.floor(1000 + Math.random() * 9000);
-    return `${adj}-${num}`;
+    // Generate clean 6-digit numeric room code (e.g. 748291)
+    return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
   createRoom(name, hostSocketId, hostName, mode = 'collaborative') {
@@ -18,7 +16,7 @@ export class RoomManager {
 
     const room = {
       id,
-      name: name?.trim() || `Vibe Lounge #${id.slice(-4)}`,
+      name: name?.trim() || `Station #${id}`,
       hostId: hostSocketId,
       mode: mode === 'host-only' ? 'host-only' : 'collaborative',
       createdAt: Date.now(),
@@ -48,11 +46,15 @@ export class RoomManager {
   }
 
   getRoom(roomId) {
-    return this.rooms.get(roomId);
+    if (!roomId) return null;
+    const cleanId = roomId.toString().trim().toLowerCase();
+    return this.rooms.get(cleanId);
   }
 
   joinRoom(roomId, socketId, userName) {
-    const room = this.rooms.get(roomId);
+    if (!roomId) return null;
+    const cleanId = roomId.toString().trim().toLowerCase();
+    const room = this.rooms.get(cleanId);
     if (!room) return null;
 
     // Clear any cleanup timeout if users rejoin

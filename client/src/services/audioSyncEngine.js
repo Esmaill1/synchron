@@ -289,17 +289,35 @@ class AudioSyncEngine {
       if (!this.ytPlayer || typeof this.ytPlayer.getPlayerState !== 'function') return;
 
       try {
+        const playerState = this.ytPlayer.getPlayerState();
+        // If currently buffering (3) or unstarted (-1), do not interrupt the network buffer download!
+        if (playerState === 3 || playerState === -1) {
+          return;
+        }
+
         const ytCurrentTime = this.ytPlayer.getCurrentTime() || 0;
         const drift = Math.abs(ytCurrentTime - targetPos);
 
-        if (forceSeek || drift > 1.8) {
-          this.ytPlayer.seekTo(targetPos, true);
+        // When actively playing, lock drift within 0.45s (network speed compensation)
+        if (playerState === 1 && (forceSeek || drift > 0.45)) {
+          const now = Date.now();
+          if (forceSeek || now - (this.lastYtSeekTime || 0) > 1800) {
+            this.ytPlayer.seekTo(targetPos, true);
+            this.lastYtSeekTime = now;
+          }
         }
 
         if (playbackState.isPlaying) {
-          this.ytPlayer.playVideo();
+          if (playerState !== 1 && playerState !== 3) {
+            this.ytPlayer.playVideo();
+          }
         } else {
-          this.ytPlayer.pauseVideo();
+          if (playerState === 1 || playerState === 3) {
+            this.ytPlayer.pauseVideo();
+          }
+          if (drift > 0.25) {
+            this.ytPlayer.seekTo(targetPos, true);
+          }
         }
       } catch (err) {
         console.warn('YouTube sync error:', err);

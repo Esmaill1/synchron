@@ -148,13 +148,16 @@ export function LobbyScreen({ onJoinedRoom }) {
           <form onSubmit={handleJoin} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--mercury-dim)' }}>
-                STATION CODE
+                STATION PIN / CODE
               </label>
               <input
                 type="text"
-                placeholder="e.g. beat-3334"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={8}
+                placeholder="e.g. 748291"
                 value={roomId}
-                onChange={(e) => setRoomId(e.target.value.toLowerCase())}
+                onChange={(e) => setRoomId(e.target.value.trim())}
                 className="arch-input"
                 required
               />

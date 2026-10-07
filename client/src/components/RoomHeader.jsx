@@ -35,7 +35,7 @@ export function RoomHeader({ room, currentUser }) {
       <div className="brand-monolith">
         <span className="brand-logotype">SYNCHRON</span>
         <span className="brand-station-tag">
-          // STATION [{room?.id?.toUpperCase()}]
+          // STATION [#{room?.id}]
         </span>
       </div>
 
