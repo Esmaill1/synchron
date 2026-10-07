@@ -45,9 +45,9 @@ export function PlayerBar({ playbackState, room, currentUser }) {
       setCurrentTime(pausedPos);
       socketService.pause(pausedPos);
     } else {
-      const playPos = audioSyncEngine.playLocally();
-      setCurrentTime(playPos);
-      socketService.play(playPos);
+      audioSyncEngine.prepareForUserGesture();
+      const targetPos = audioSyncEngine.computeTargetPosition(playbackState) || currentTime;
+      socketService.play(targetPos);
     }
   };
 
@@ -65,11 +65,6 @@ export function PlayerBar({ playbackState, room, currentUser }) {
   const handleSeekCommit = () => {
     if (!canControl) return;
     setIsSeeking(false);
-    if (audioSyncEngine.audioElement && playbackState?.currentTrack?.type === 'file') {
-      try {
-        audioSyncEngine.audioElement.currentTime = seekValue;
-      } catch {}
-    }
     socketService.seek(seekValue);
   };
 

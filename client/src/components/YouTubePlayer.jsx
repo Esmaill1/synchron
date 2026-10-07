@@ -93,8 +93,8 @@ export function YouTubePlayer({ videoId, playbackState, onDurationLoaded }) {
                 const targetPos = audioSyncEngine.computeTargetPosition(playbackState);
                 const actualPos = event.target.getCurrentTime() || 0;
                 const drift = Math.abs(targetPos - actualPos);
-                // If user's internet took extra seconds to buffer, instantly snap to room clock:
-                if (drift > 0.35) {
+                // If user's internet took extra seconds to buffer, snap to room clock:
+                if (drift > 0.25) {
                   event.target.seekTo(targetPos, true);
                 }
               } else if (playbackState && !playbackState.isPlaying) {

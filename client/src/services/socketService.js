@@ -28,30 +28,45 @@ class SocketService {
 
     this.syncSamples = [];
 
-    this.socket.on('pong:sync', ({ clientSendTime, serverTime }) => {
-      const receiveTime = Date.now();
-      const rtt = receiveTime - clientSendTime;
+    this.socket.on('pong:sync', ({ clientSendTime, serverReceiveTime, serverSendTime, serverTime }) => {
+      const clientReceiveTime = (typeof performance !== 'undefined' && performance.timeOrigin)
+        ? (performance.timeOrigin + performance.now())
+        : Date.now();
+
+      const sRecv = serverReceiveTime || serverTime || Date.now();
+      const sSend = serverSendTime || serverTime || Date.now();
+
+      // True 4-timestamp network round-trip time: total elapsed minus server turnaround
+      const totalElapsed = clientReceiveTime - clientSendTime;
+      const serverProcessing = Math.max(0, sSend - sRecv);
+      const rtt = Math.max(1, totalElapsed - serverProcessing);
       this.lastRtt = rtt;
 
-      // Filter out high-jitter outliers (> 600ms)
-      if (rtt > 600 && this.serverClockOffset !== 0) return;
+      // Filter high-jitter outlier samples (> 500ms) once calibrated
+      if (rtt > 500 && this.syncSamples.length >= 4) return;
 
-      // Cristian's Algorithm: ServerTime - (ClientSendTime + RTT / 2)
-      const measuredOffset = serverTime - (clientSendTime + rtt / 2);
+      // Standard NTP clock offset: ((T2 - T1) + (T3 - T4)) / 2
+      const measuredOffset = ((sRecv - clientSendTime) + (sSend - clientReceiveTime)) / 2;
 
       // Collect rolling window of probe samples
-      this.syncSamples.push({ rtt, offset: measuredOffset });
-      if (this.syncSamples.length > 8) {
+      this.syncSamples.push({ rtt, offset: measuredOffset, timestamp: Date.now() });
+      if (this.syncSamples.length > 12) {
         this.syncSamples.shift();
       }
 
-      // Sort by lowest RTT (minimum network queuing delay = true clock symmetry)
+      // Sort by lowest RTT (samples with minimal queuing delay give the truest clock symmetry)
       const sorted = [...this.syncSamples].sort((a, b) => a.rtt - b.rtt);
-      // Average the best 3 lowest-latency samples
-      const bestSamples = sorted.slice(0, Math.min(3, sorted.length));
-      const bestAvgOffset = bestSamples.reduce((sum, s) => sum + s.offset, 0) / bestSamples.length;
+      // Select best 4 lowest-latency samples
+      const bestSamples = sorted.slice(0, Math.min(4, sorted.length));
 
-      this.serverClockOffset = bestAvgOffset;
+      // Calculate median offset among the lowest-RTT samples to eliminate asymmetric spikes
+      const offsets = bestSamples.map((s) => s.offset).sort((a, b) => a - b);
+      const mid = Math.floor(offsets.length / 2);
+      const medianOffset = offsets.length % 2 !== 0
+        ? offsets[mid]
+        : (offsets[mid - 1] + offsets[mid]) / 2;
+
+      this.serverClockOffset = medianOffset;
       this.bestRtt = sorted[0].rtt;
     });
 
@@ -61,25 +76,32 @@ class SocketService {
   }
 
   startClockCalibration() {
-    // Rapid burst probes at startup (5 rapid pings 120ms apart to lock clock immediately)
-    for (let i = 0; i < 5; i++) {
-      setTimeout(() => this.calibrate(), i * 140);
+    // Rapid burst probes at startup (8 rapid pings 60ms apart to lock clock immediately within 500ms)
+    for (let i = 0; i < 8; i++) {
+      setTimeout(() => this.calibrate(), i * 60);
     }
 
     if (this.pingTimer) clearInterval(this.pingTimer);
+    // Continuous recalibration every 2.5s to compensate for client crystal oscillator drift
     this.pingTimer = setInterval(() => {
       this.calibrate();
-    }, 6000);
+    }, 2500);
   }
 
   calibrate() {
     if (this.socket && this.socket.connected) {
-      this.socket.emit('ping:sync', { clientSendTime: Date.now() });
+      const sendTime = (typeof performance !== 'undefined' && performance.timeOrigin)
+        ? (performance.timeOrigin + performance.now())
+        : Date.now();
+      this.socket.emit('ping:sync', { clientSendTime: sendTime });
     }
   }
 
   getEstimatedServerNow() {
-    return Date.now() + this.serverClockOffset;
+    const clientNow = (typeof performance !== 'undefined' && performance.timeOrigin)
+      ? (performance.timeOrigin + performance.now())
+      : Date.now();
+    return clientNow + this.serverClockOffset;
   }
 
   getLatency() {

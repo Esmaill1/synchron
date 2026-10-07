@@ -5,10 +5,13 @@ export function setupSocketHandlers(io) {
     let currentRoomId = null;
 
     // Fast clock synchronization ping
+    // High-precision 4-timestamp NTP clock calibration
     socket.on('ping:sync', (data) => {
+      const serverReceiveTime = Date.now();
       socket.emit('pong:sync', {
         clientSendTime: data?.clientSendTime || 0,
-        serverTime: Date.now()
+        serverReceiveTime,
+        serverSendTime: Date.now()
       });
     });
 
@@ -69,7 +72,7 @@ export function setupSocketHandlers(io) {
       }
     });
 
-    // Play action (instant response)
+    // Play action (instant coordinated response)
     socket.on('playback:play', (data, callback) => {
       const cb = typeof data === 'function' ? data : callback;
       const positionSec = typeof data === 'object' ? data?.positionSec : null;
@@ -86,13 +89,13 @@ export function setupSocketHandlers(io) {
       const success = roomManager.play(currentRoomId, socket.id, positionSec);
       if (success) {
         const state = roomManager.getPublicRoomState(currentRoomId);
-        io.to(currentRoomId).emit('playback:sync', { ...state.playback, originSocketId: socket.id });
+        io.to(currentRoomId).emit('playback:sync', state.playback);
         io.to(currentRoomId).emit('queue:updated', { queue: state.queue });
         if (typeof cb === 'function') cb({ success: true });
       }
     });
 
-    // Pause action (instant response)
+    // Pause action (instant coordinated response)
     socket.on('playback:pause', (data, callback) => {
       const cb = typeof data === 'function' ? data : callback;
       const positionSec = typeof data === 'object' ? data?.positionSec : null;
@@ -109,12 +112,12 @@ export function setupSocketHandlers(io) {
       const success = roomManager.pause(currentRoomId, socket.id, positionSec);
       if (success) {
         const state = roomManager.getPublicRoomState(currentRoomId);
-        io.to(currentRoomId).emit('playback:sync', { ...state.playback, originSocketId: socket.id });
+        io.to(currentRoomId).emit('playback:sync', state.playback);
         if (typeof cb === 'function') cb({ success: true });
       }
     });
 
-    // Seek action (instant response)
+    // Seek action (instant coordinated response)
     socket.on('playback:seek', ({ positionSec }, callback) => {
       if (!currentRoomId) return;
       const room = roomManager.getRoom(currentRoomId);
@@ -128,7 +131,7 @@ export function setupSocketHandlers(io) {
       const success = roomManager.seek(currentRoomId, positionSec, socket.id);
       if (success) {
         const state = roomManager.getPublicRoomState(currentRoomId);
-        io.to(currentRoomId).emit('playback:sync', { ...state.playback, originSocketId: socket.id });
+        io.to(currentRoomId).emit('playback:sync', state.playback);
         if (typeof callback === 'function') callback({ success: true });
       }
     });

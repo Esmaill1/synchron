@@ -158,8 +158,9 @@ export class RoomManager {
     }
     room.playback.isPlaying = true;
     const now = Date.now();
-    // 200ms future scheduled epoch: allows all devices across network to pre-arm and trigger simultaneously
-    room.playback.startAtServerTimestamp = now + 200;
+    // 120ms scheduled epoch: tight coordinated window for exact millisecond start across network
+    const leadTime = 120;
+    room.playback.startAtServerTimestamp = now + leadTime;
     room.playback.lastUpdatedTimestamp = room.playback.startAtServerTimestamp;
     return true;
   }
@@ -174,6 +175,7 @@ export class RoomManager {
       room.playback.positionSec = this.getCurrentPosition(room);
     }
     room.playback.isPlaying = false;
+    room.playback.startAtServerTimestamp = null;
     room.playback.lastUpdatedTimestamp = Date.now();
     return true;
   }
@@ -183,7 +185,15 @@ export class RoomManager {
     if (!room || !this.canControl(room, socketId)) return false;
 
     room.playback.positionSec = Math.max(0, positionSec);
-    room.playback.lastUpdatedTimestamp = Date.now();
+    const now = Date.now();
+    if (room.playback.isPlaying) {
+      const leadTime = 100;
+      room.playback.startAtServerTimestamp = now + leadTime;
+      room.playback.lastUpdatedTimestamp = room.playback.startAtServerTimestamp;
+    } else {
+      room.playback.startAtServerTimestamp = null;
+      room.playback.lastUpdatedTimestamp = now;
+    }
     return true;
   }
 
@@ -211,7 +221,10 @@ export class RoomManager {
       room.playback.isPlaying = true;
       room.playback.positionSec = 0;
       room.playback.duration = firstTrack.durationSec || 0;
-      room.playback.lastUpdatedTimestamp = Date.now();
+      const now = Date.now();
+      const leadTime = 150;
+      room.playback.startAtServerTimestamp = now + leadTime;
+      room.playback.lastUpdatedTimestamp = room.playback.startAtServerTimestamp;
       return { autoStarted: true, track: firstTrack };
     }
 
@@ -245,13 +258,17 @@ export class RoomManager {
       room.playback.isPlaying = true;
       room.playback.positionSec = 0;
       room.playback.duration = next.durationSec || 0;
-      room.playback.lastUpdatedTimestamp = Date.now();
+      const now = Date.now();
+      const leadTime = 150;
+      room.playback.startAtServerTimestamp = now + leadTime;
+      room.playback.lastUpdatedTimestamp = room.playback.startAtServerTimestamp;
       return next;
     } else {
       room.playback.currentTrack = null;
       room.playback.isPlaying = false;
       room.playback.positionSec = 0;
       room.playback.duration = 0;
+      room.playback.startAtServerTimestamp = null;
       room.playback.lastUpdatedTimestamp = Date.now();
       return null;
     }
