@@ -41,9 +41,13 @@ export function PlayerBar({ playbackState, room, currentUser }) {
   const handlePlayPause = () => {
     if (!canControl) return;
     if (isPlaying) {
-      socketService.pause();
+      const pausedPos = audioSyncEngine.pauseLocally();
+      setCurrentTime(pausedPos);
+      socketService.pause(pausedPos);
     } else {
-      socketService.play();
+      const playPos = audioSyncEngine.playLocally();
+      setCurrentTime(playPos);
+      socketService.play(playPos);
     }
   };
 
@@ -61,6 +65,11 @@ export function PlayerBar({ playbackState, room, currentUser }) {
   const handleSeekCommit = () => {
     if (!canControl) return;
     setIsSeeking(false);
+    if (audioSyncEngine.audioElement && playbackState?.currentTrack?.type === 'file') {
+      try {
+        audioSyncEngine.audioElement.currentTime = seekValue;
+      } catch {}
+    }
     socketService.seek(seekValue);
   };
 

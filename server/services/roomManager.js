@@ -138,7 +138,7 @@ export class RoomManager {
     return true;
   }
 
-  play(roomId, socketId) {
+  play(roomId, socketId, clientPositionSec = null) {
     const room = this.rooms.get(roomId);
     if (!room || !this.canControl(room, socketId)) return false;
     if (!room.playback.currentTrack && room.queue.length > 0) {
@@ -146,22 +146,25 @@ export class RoomManager {
     }
     if (!room.playback.currentTrack) return false;
 
-    if (!room.playback.isPlaying) {
-      room.playback.isPlaying = true;
-      room.playback.lastUpdatedTimestamp = Date.now();
+    if (typeof clientPositionSec === 'number' && !isNaN(clientPositionSec) && clientPositionSec >= 0) {
+      room.playback.positionSec = clientPositionSec;
     }
+    room.playback.isPlaying = true;
+    room.playback.lastUpdatedTimestamp = Date.now();
     return true;
   }
 
-  pause(roomId, socketId) {
+  pause(roomId, socketId, clientPositionSec = null) {
     const room = this.rooms.get(roomId);
     if (!room || !this.canControl(room, socketId)) return false;
 
-    if (room.playback.isPlaying) {
+    if (typeof clientPositionSec === 'number' && !isNaN(clientPositionSec) && clientPositionSec >= 0) {
+      room.playback.positionSec = clientPositionSec;
+    } else if (room.playback.isPlaying) {
       room.playback.positionSec = this.getCurrentPosition(room);
-      room.playback.isPlaying = false;
-      room.playback.lastUpdatedTimestamp = Date.now();
     }
+    room.playback.isPlaying = false;
+    room.playback.lastUpdatedTimestamp = Date.now();
     return true;
   }
 

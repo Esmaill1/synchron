@@ -81,6 +81,18 @@ router.post('/upload', upload.single('file'), (req, res) => {
   }
 });
 
+// CORS options for media streaming
+router.options('/media/:filename', (req, res) => {
+  res.set({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+    'Access-Control-Allow-Headers': 'Range, Content-Type, Accept-Encoding',
+    'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
+    'Access-Control-Max-Age': '86400'
+  });
+  res.sendStatus(204);
+});
+
 // HTTP 206 Partial Content Range Streaming
 router.get('/media/:filename', (req, res) => {
   const safeFilename = path.basename(req.params.filename);
@@ -106,13 +118,23 @@ router.get('/media/:filename', (req, res) => {
   };
   const contentType = mimeTypes[ext] || 'audio/mpeg';
 
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+    'Access-Control-Allow-Headers': 'Range, Content-Type, Accept-Encoding',
+    'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges'
+  };
+
   if (range) {
     const parts = range.replace(/bytes=/, '').split('-');
     const start = parseInt(parts[0], 10);
     const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
 
     if (start >= fileSize || end >= fileSize) {
-      res.status(416).set('Content-Range', `bytes */${fileSize}`).send('Requested range not satisfiable');
+      res.status(416).set({
+        'Content-Range': `bytes */${fileSize}`,
+        ...corsHeaders
+      }).send('Requested range not satisfiable');
       return;
     }
 
@@ -123,7 +145,8 @@ router.get('/media/:filename', (req, res) => {
       'Accept-Ranges': 'bytes',
       'Content-Length': chunksize,
       'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=86400'
+      'Cache-Control': 'public, max-age=86400',
+      ...corsHeaders
     };
 
     res.writeHead(206, head);
@@ -133,7 +156,8 @@ router.get('/media/:filename', (req, res) => {
       'Content-Length': fileSize,
       'Content-Type': contentType,
       'Accept-Ranges': 'bytes',
-      'Cache-Control': 'public, max-age=86400'
+      'Cache-Control': 'public, max-age=86400',
+      ...corsHeaders
     };
     res.writeHead(200, head);
     fs.createReadStream(filePath).pipe(res);

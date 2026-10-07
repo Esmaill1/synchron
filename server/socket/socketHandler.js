@@ -69,46 +69,52 @@ export function setupSocketHandlers(io) {
       }
     });
 
-    // Play action
-    socket.on('playback:play', (callback) => {
+    // Play action (instant response)
+    socket.on('playback:play', (data, callback) => {
+      const cb = typeof data === 'function' ? data : callback;
+      const positionSec = typeof data === 'object' ? data?.positionSec : null;
+
       if (!currentRoomId) return;
       const room = roomManager.getRoom(currentRoomId);
       if (!room) return;
 
       if (!roomManager.canControl(room, socket.id)) {
-        if (typeof callback === 'function') callback({ success: false, error: 'Host-only mode is active.' });
+        if (typeof cb === 'function') cb({ success: false, error: 'Host-only mode is active.' });
         return;
       }
 
-      const success = roomManager.play(currentRoomId, socket.id);
+      const success = roomManager.play(currentRoomId, socket.id, positionSec);
       if (success) {
         const state = roomManager.getPublicRoomState(currentRoomId);
-        io.to(currentRoomId).emit('playback:sync', state.playback);
+        io.to(currentRoomId).emit('playback:sync', { ...state.playback, originSocketId: socket.id });
         io.to(currentRoomId).emit('queue:updated', { queue: state.queue });
-        if (typeof callback === 'function') callback({ success: true });
+        if (typeof cb === 'function') cb({ success: true });
       }
     });
 
-    // Pause action
-    socket.on('playback:pause', (callback) => {
+    // Pause action (instant response)
+    socket.on('playback:pause', (data, callback) => {
+      const cb = typeof data === 'function' ? data : callback;
+      const positionSec = typeof data === 'object' ? data?.positionSec : null;
+
       if (!currentRoomId) return;
       const room = roomManager.getRoom(currentRoomId);
       if (!room) return;
 
       if (!roomManager.canControl(room, socket.id)) {
-        if (typeof callback === 'function') callback({ success: false, error: 'Host-only mode is active.' });
+        if (typeof cb === 'function') cb({ success: false, error: 'Host-only mode is active.' });
         return;
       }
 
-      const success = roomManager.pause(currentRoomId, socket.id);
+      const success = roomManager.pause(currentRoomId, socket.id, positionSec);
       if (success) {
         const state = roomManager.getPublicRoomState(currentRoomId);
-        io.to(currentRoomId).emit('playback:sync', state.playback);
-        if (typeof callback === 'function') callback({ success: true });
+        io.to(currentRoomId).emit('playback:sync', { ...state.playback, originSocketId: socket.id });
+        if (typeof cb === 'function') cb({ success: true });
       }
     });
 
-    // Seek action
+    // Seek action (instant response)
     socket.on('playback:seek', ({ positionSec }, callback) => {
       if (!currentRoomId) return;
       const room = roomManager.getRoom(currentRoomId);
@@ -122,7 +128,7 @@ export function setupSocketHandlers(io) {
       const success = roomManager.seek(currentRoomId, positionSec, socket.id);
       if (success) {
         const state = roomManager.getPublicRoomState(currentRoomId);
-        io.to(currentRoomId).emit('playback:sync', state.playback);
+        io.to(currentRoomId).emit('playback:sync', { ...state.playback, originSocketId: socket.id });
         if (typeof callback === 'function') callback({ success: true });
       }
     });

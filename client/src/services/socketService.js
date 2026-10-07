@@ -30,8 +30,20 @@ class SocketService {
       const receiveTime = Date.now();
       const rtt = receiveTime - clientSendTime;
       this.lastRtt = rtt;
-      // Offset = ServerTime - (ClientSendTime + RTT / 2)
-      this.serverClockOffset = serverTime - (clientSendTime + rtt / 2);
+
+      // Filter out high-jitter outliers (> 500ms)
+      if (rtt > 500 && this.serverClockOffset !== 0) return;
+
+      // Cristian's Algorithm: ServerTime - (ClientSendTime + RTT / 2)
+      const measuredOffset = serverTime - (clientSendTime + rtt / 2);
+
+      if (this.serverClockOffset === 0 || rtt < (this.bestRtt || 9999)) {
+        this.bestRtt = rtt;
+        this.serverClockOffset = measuredOffset;
+      } else {
+        // Smooth filter (Exponential Moving Average) to eliminate jitter
+        this.serverClockOffset = this.serverClockOffset * 0.8 + measuredOffset * 0.2;
+      }
     });
 
     this.socket.on('disconnect', () => {
@@ -41,10 +53,15 @@ class SocketService {
 
   startClockCalibration() {
     this.calibrate();
+    // Burst calibration at startup (3 rapid pings)
+    setTimeout(() => this.calibrate(), 400);
+    setTimeout(() => this.calibrate(), 1000);
+    setTimeout(() => this.calibrate(), 2000);
+
     if (this.pingTimer) clearInterval(this.pingTimer);
     this.pingTimer = setInterval(() => {
       this.calibrate();
-    }, 10000);
+    }, 8000);
   }
 
   calibrate() {
@@ -74,15 +91,15 @@ class SocketService {
     });
   }
 
-  play() {
+  play(positionSec = null) {
     return new Promise((resolve) => {
-      this.socket.emit('playback:play', (res) => resolve(res));
+      this.socket.emit('playback:play', { positionSec }, (res) => resolve(res));
     });
   }
 
-  pause() {
+  pause(positionSec = null) {
     return new Promise((resolve) => {
-      this.socket.emit('playback:pause', (res) => resolve(res));
+      this.socket.emit('playback:pause', { positionSec }, (res) => resolve(res));
     });
   }
 

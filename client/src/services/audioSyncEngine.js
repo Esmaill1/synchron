@@ -9,9 +9,14 @@ class AudioSyncEngine {
     this.ytPlayer = null;
 
     this.currentPlaybackState = null;
-    this.volume = 0.8;
+    this.currentMediaUrl = null;
+    this.pendingSeekPos = null;
+    this.volume = 0.85;
     this.isMuted = false;
     this.autoplayBlocked = false;
+
+    this.lastHardSeekTime = 0;
+    this.lastUserActionTimestamp = 0;
 
     this.onAutoplayBlockedCallback = null;
     this.onPlaybackTimeUpdateCallback = null;
@@ -24,6 +29,7 @@ class AudioSyncEngine {
     if (this.audioElement === element) return;
     this.audioElement = element;
     this.audioElement.crossOrigin = 'anonymous';
+    this.audioElement.preload = 'auto';
     this.audioElement.volume = this.isMuted ? 0 : this.volume;
 
     this.audioElement.addEventListener('ended', () => {
@@ -83,8 +89,62 @@ class AudioSyncEngine {
 
   resumeAudioContext() {
     if (this.audioContext && this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
+      this.audioContext.resume().catch(() => {});
     }
+  }
+
+  // Instant 0ms local play execution
+  playLocally() {
+    this.lastUserActionTimestamp = Date.now();
+    this.resumeAudioContext();
+
+    if (this.currentPlaybackState) {
+      this.currentPlaybackState.isPlaying = true;
+    }
+
+    if (this.currentPlaybackState?.currentTrack?.type === 'file' && this.audioElement) {
+      if (this.audioElement.paused) {
+        this.audioElement.play().catch(() => {});
+      }
+      return this.audioElement.currentTime;
+    }
+
+    if (this.currentPlaybackState?.currentTrack?.type === 'youtube' && this.ytPlayer) {
+      try {
+        if (typeof this.ytPlayer.playVideo === 'function') {
+          this.ytPlayer.playVideo();
+        }
+      } catch {}
+      return typeof this.ytPlayer.getCurrentTime === 'function' ? this.ytPlayer.getCurrentTime() : 0;
+    }
+
+    return 0;
+  }
+
+  // Instant 0ms local pause execution
+  pauseLocally() {
+    this.lastUserActionTimestamp = Date.now();
+
+    if (this.currentPlaybackState) {
+      this.currentPlaybackState.isPlaying = false;
+    }
+
+    if (this.currentPlaybackState?.currentTrack?.type === 'file' && this.audioElement) {
+      this.audioElement.pause();
+      this.audioElement.playbackRate = 1.0;
+      return this.audioElement.currentTime;
+    }
+
+    if (this.currentPlaybackState?.currentTrack?.type === 'youtube' && this.ytPlayer) {
+      try {
+        if (typeof this.ytPlayer.pauseVideo === 'function') {
+          this.ytPlayer.pauseVideo();
+        }
+      } catch {}
+      return typeof this.ytPlayer.getCurrentTime === 'function' ? this.ytPlayer.getCurrentTime() : 0;
+    }
+
+    return 0;
   }
 
   computeTargetPosition(playbackState) {
@@ -93,7 +153,7 @@ class AudioSyncEngine {
       return playbackState.positionSec || 0;
     }
     const serverNow = socketService.getEstimatedServerNow();
-    const elapsed = (serverNow - playbackState.lastUpdatedTimestamp) / 1000;
+    const elapsed = Math.max(0, (serverNow - playbackState.lastUpdatedTimestamp) / 1000);
     let target = (playbackState.positionSec || 0) + elapsed;
     if (playbackState.duration > 0 && target > playbackState.duration) {
       target = playbackState.duration;
@@ -103,11 +163,12 @@ class AudioSyncEngine {
 
   applySync(playbackState, forceSeek = false) {
     this.currentPlaybackState = playbackState;
+
     if (!playbackState || !playbackState.currentTrack) {
-      // No active track
       if (this.audioElement) {
         this.audioElement.pause();
         this.audioElement.src = '';
+        this.currentMediaUrl = null;
       }
       if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
         this.ytPlayer.pauseVideo();
@@ -115,11 +176,17 @@ class AudioSyncEngine {
       return;
     }
 
+    // Ignore incoming sync if we just clicked Play/Pause locally or are the originator
+    const isOriginator = playbackState.originSocketId && playbackState.originSocketId === socketService.getSocketId();
+    const isRecentLocalAction = Date.now() - this.lastUserActionTimestamp < 500;
+    if ((isOriginator || isRecentLocalAction) && !forceSeek) {
+      return;
+    }
+
     const track = playbackState.currentTrack;
     const targetPos = this.computeTargetPosition(playbackState);
 
     if (track.type === 'file') {
-      // Pause YouTube if it was playing
       if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
         try { this.ytPlayer.pauseVideo(); } catch {}
       }
@@ -128,33 +195,93 @@ class AudioSyncEngine {
 
       const baseUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
       const fullMediaUrl = track.url.startsWith('http') ? track.url : `${baseUrl}${track.url}`;
-      if (this.audioElement.src !== fullMediaUrl) {
+
+      // When loading a brand new track
+      if (this.currentMediaUrl !== fullMediaUrl) {
+        this.currentMediaUrl = fullMediaUrl;
+        this.pendingSeekPos = targetPos;
         this.audioElement.src = fullMediaUrl;
-        this.audioElement.currentTime = targetPos;
+        this.audioElement.playbackRate = 1.0;
+
+        const onReady = () => {
+          this.audioElement.removeEventListener('canplay', onReady);
+          if (typeof this.pendingSeekPos === 'number') {
+            this.audioElement.currentTime = this.pendingSeekPos;
+            this.pendingSeekPos = null;
+          }
+          if (this.currentPlaybackState?.isPlaying) {
+            this.resumeAudioContext();
+            this.audioElement.play().catch(() => {});
+          }
+        };
+
+        this.audioElement.addEventListener('canplay', onReady, { once: true });
+        this.audioElement.load();
+        return;
       }
 
-      const drift = Math.abs(this.audioElement.currentTime - targetPos);
-
-      if (forceSeek || drift > 1.25) {
-        this.audioElement.currentTime = targetPos;
+      // If playback is paused
+      if (!playbackState.isPlaying) {
+        this.audioElement.playbackRate = 1.0;
+        if (!this.audioElement.paused) {
+          this.audioElement.pause();
+        }
+        if (forceSeek || Math.abs(this.audioElement.currentTime - targetPos) > 0.2) {
+          this.audioElement.currentTime = targetPos;
+        }
+        return;
       }
 
-      if (playbackState.isPlaying) {
+      // If playback is supposed to be playing
+      if (this.audioElement.paused && this.audioElement.readyState >= 2) {
         this.resumeAudioContext();
-        const playPromise = this.audioElement.play();
-        if (playPromise !== undefined) {
-          playPromise.catch((err) => {
+        const p = this.audioElement.play();
+        if (p !== undefined) {
+          p.catch((err) => {
             if (err.name === 'NotAllowedError') {
               this.autoplayBlocked = true;
               if (this.onAutoplayBlockedCallback) this.onAutoplayBlockedCallback(true);
             }
           });
         }
+      }
+
+      // Smooth Anti-Glitch Phase-Locking (PLL)
+      const currentPos = this.audioElement.currentTime;
+      const diff = targetPos - currentPos; // > 0: behind target, < 0: ahead of target
+      const absDiff = Math.abs(diff);
+
+      // ZONE 3: Hard Seek (> 1.8s desync or explicit user scrub)
+      if (forceSeek || absDiff > 1.8) {
+        const now = Date.now();
+        if (forceSeek || now - this.lastHardSeekTime > 2500) {
+          this.audioElement.currentTime = targetPos;
+          this.audioElement.playbackRate = 1.0;
+          this.lastHardSeekTime = now;
+        }
+        return;
+      }
+
+      // ZONE 1: Deadband Lock (<= 120ms): Perfect sync, zero adjustment, zero clicks
+      if (absDiff <= 0.12) {
+        if (this.audioElement.playbackRate !== 1.0) {
+          this.audioElement.playbackRate = 1.0;
+        }
+        return;
+      }
+
+      // ZONE 2: Soft Phase-Lock Warping (120ms to 1800ms)
+      // Micro-adjust playbackRate with pitch preservation: ZERO buffer flushes, ZERO stutter/repeats!
+      if (diff > 0) {
+        // Lagging behind: gently speed up (max 5%)
+        const warp = Math.min(1.05, 1.0 + diff * 0.035);
+        this.audioElement.playbackRate = warp;
       } else {
-        this.audioElement.pause();
+        // Ahead of target: gently slow down (min 0.95)
+        const warp = Math.max(0.95, 1.0 + diff * 0.035);
+        this.audioElement.playbackRate = warp;
       }
     } else if (track.type === 'youtube') {
-      // Pause HTML5 audio
       if (this.audioElement) {
         this.audioElement.pause();
       }
@@ -165,7 +292,7 @@ class AudioSyncEngine {
         const ytCurrentTime = this.ytPlayer.getCurrentTime() || 0;
         const drift = Math.abs(ytCurrentTime - targetPos);
 
-        if (forceSeek || drift > 1.4) {
+        if (forceSeek || drift > 1.8) {
           this.ytPlayer.seekTo(targetPos, true);
         }
 
@@ -180,7 +307,6 @@ class AudioSyncEngine {
     }
   }
 
-  // Triggered when user clicks anywhere after autoplay restriction
   unlockAutoplay() {
     this.autoplayBlocked = false;
     this.resumeAudioContext();
@@ -193,11 +319,12 @@ class AudioSyncEngine {
 
   startPeriodicDriftMonitor() {
     if (this.syncInterval) clearInterval(this.syncInterval);
+    // Smooth 1-second cadence: applies micro-rate phase lock smoothly
     this.syncInterval = setInterval(() => {
       if (this.currentPlaybackState && this.currentPlaybackState.isPlaying) {
         this.applySync(this.currentPlaybackState, false);
       }
-    }, 4000);
+    }, 1000);
   }
 
   stop() {
